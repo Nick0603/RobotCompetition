@@ -1,10 +1,29 @@
 #include <SoftwareSerial.h>
 #include <Wire.h>
+#include <Servo.h>
 
-SoftwareSerial BT(8, 9);
+Servo myservo; // 建立Servo物件，控制伺服馬達
+SoftwareSerial BT(8,9);
 byte readByte;
 int readDirection;
 int readSpeed;
+
+const byte mode_motor_stop = 0;
+const byte mode_Throw_motor_on = 1;
+const byte mode_Throw_motor_off = 2;
+const byte mode_Throw_boll_one_time = 3;
+
+const int angleMax = 180;
+const int angleMin = 30;
+int nowAngle = angleMax;
+
+const int servoMotorPin = 12;
+
+void pinSetup();
+void montorStop();
+void montorWork(int directionM,int speedM);
+void angleWork(int readInt);
+void writeAngle(int readAngle);
 
 // 此方向分量是以數字九宮格製作
 int directionArray[10][4]  = 
@@ -25,10 +44,16 @@ const int motor1_2 = 11;
 const int motor2_1 = 5;
 const int motor2_2 = 6;
 
+const int    = 13;
+
+long throwBollTime = -1000;
+
 void setup() {
   pinSetup();
   BT.begin(9600);
   Serial.begin(9600);
+  myservo.attach(servoMotorPin);
+  myservo.write(nowAngle);
   delay(150); 
 }
 
@@ -37,8 +62,21 @@ void loop() {
   if (BT.available() > 0) {
     readByte = BT.read();
     Serial.println(readByte);
-    if(readByte == 0 ){
+    if(readByte == mode_motor_stop){
       montorStop();
+    }else if(readByte == mode_Throw_motor_on || readByte == mode_Throw_motor_off){
+      if(readByte == mode_Throw_motor_on){
+        digitalWrite(throwMotorPin,HIGH);
+        Serial.println("throwOn");
+      }else{
+        digitalWrite(throwMotorPin,LOW);
+        Serial.println("throwOff");
+      }
+    }else if(readByte == mode_Throw_boll_one_time){
+      writeAngle(angleMin);
+      delay(1000);
+      writeAngle(angleMax);
+      delay(1000);
     }else{
       readDirection = readByte % 10;
       readSpeed = (int)(readByte / 10);
@@ -56,14 +94,34 @@ void loop() {
   }
   
   if (Serial.available() > 0) {
-    readByte = Serial.read();
+    readByte = 0;
+    while(Serial.available() > 0){
+      char nowReadDigital = Serial.read();
+      readByte = readByte*10 + nowReadDigital - '0';
+    }
+    if(readByte >255){
+      readByte = 255;
+    }else if(readByte < 0){
+      readByte = 0;
+    }
     
-    if(readByte == '0'){
+    if(readByte == mode_motor_stop){
       montorStop();
+    }else if(readByte == mode_Throw_motor_on || readByte == mode_Throw_motor_off){
+      if(readByte == mode_Throw_motor_on){
+        digitalWrite(throwMotorPin,HIGH);
+        Serial.println("throwOn");
+      }else{
+        digitalWrite(throwMotorPin,LOW);
+        Serial.println("throwOff");
+      }
+    }else if(readByte == mode_Throw_boll_one_time){
+      throwBollTime = millis();
     }else{
-      readDirection = (readByte - '0');
-      readByte = Serial.read();
-      readSpeed = (readByte - '0');
+      readDirection = readByte % 10;
+      readSpeed = (int)(readByte / 10);
+      Serial.print(readByte);
+      Serial.print(" ");
       Serial.print(readDirection);
       Serial.print(" ");
       Serial.println(readSpeed);
@@ -73,14 +131,7 @@ void loop() {
         }
       }
     }
-    delay(20);
-    while(Serial.available() > 0){
-      readByte = Serial.read();
-      delay(20);
-    }
   }
-  
-  delay(10);
 }
 
 void montorStop(){
@@ -111,10 +162,31 @@ void pinSetup(){
   pinMode(motor1_1,OUTPUT);
   pinMode(motor1_2,OUTPUT);
   pinMode(motor2_1,OUTPUT);
-  pinMode(motor2_2,OUTPUT);
-  analogWrite(motor1_1,0);
-  analogWrite(motor1_2,0);
-  analogWrite(motor2_1,0);
-  analogWrite(motor2_2,0);
+  pinMode(motor2_2,OUTPUT); 
+  pinMode(throwMotorPin,OUTPUT);
+  myservo.attach(servoMotorPin);
+  analogWrite(motor1_1,LOW);
+  analogWrite(motor1_2,LOW);
+  analogWrite(motor2_1,LOW);
+  analogWrite(motor2_2,LOW);
+  digitalWrite(throwMotorPin,LOW);
 }
 
+
+void writeAngle(int readAngle){
+  while(nowAngle != readAngle){
+    if(readAngle > nowAngle){
+      nowAngle += 10;
+      if(nowAngle > readAngle){
+        nowAngle = readAngle;
+      }
+    }else{
+      nowAngle -= 10;
+      if(nowAngle < readAngle){
+        nowAngle = readAngle;
+      }
+    }
+    myservo.write(nowAngle);
+    delay(50);
+  }
+}

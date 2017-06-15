@@ -12,8 +12,8 @@ int readInt;
 bool autoRota = false;
 
 const int autoTurnOnValue =520;
-const int angleMax = 130;
-const int angleMin = 0;
+const int angleMax = 170;
+const int angleMin = 50;
 
 int nowAngle = angleMax;
 long lastRotaTime = 0;
