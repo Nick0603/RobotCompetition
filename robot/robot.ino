@@ -165,6 +165,5 @@ int getSerialInt(){
   }else if(readInt < 0){
     readInt = 0;
   }
-   
   return readInt;
 }
