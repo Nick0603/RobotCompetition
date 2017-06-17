@@ -3,29 +3,28 @@
 #include <Servo.h>
 
 Servo myservo; // 建立Servo物件，控制伺服馬達
-SoftwareSerial BT(8,9);
-byte readByte;
-int readDirection;
-int readSpeed;
+SoftwareSerial BT(8,9); //藍芽腳位，TX為PIN8，RX為PIN9
+
+void pinSetup();
+void montorStop();
+void montorWork(int directionM,int speedM);
+void threadReadMode(byte readByte);
+int getSerialInt();
 
 const byte mode_motor_stop = 0;
 const byte mode_Throw_motor_on = 1;
 const byte mode_Throw_motor_off = 2;
 const byte mode_Throw_boll_one_time = 3;
+const int throwMotorPin = 12;
+const int throwBollPin = 13;
+long lastThrowTime = 0;
+// 預設多少時間給投球機器人感測投球
+long throwTimeChangeTime = 1000;
+bool DEBUG = false;
 
-const int angleMax = 180;
-const int angleMin = 30;
-int nowAngle = angleMax;
-
-const int servoMotorPin = 12;
-
-void pinSetup();
-void montorStop();
-void montorWork(int directionM,int speedM);
-void angleWork(int readInt);
-void writeAngle(int readAngle);
-
-// 此方向分量是以數字九宮格製作
+/* 此方向陣列是以類計算機上的數字九宮格
+中的五為中心，像八個方向發散
+對應值是左右馬達的最高轉速。*/
 int directionArray[10][4]  = 
 {
   {0,0,0,0},
@@ -44,92 +43,90 @@ const int motor1_2 = 11;
 const int motor2_1 = 5;
 const int motor2_2 = 6;
 
-const int    = 13;
-
-long throwBollTime = -1000;
-
 void setup() {
   pinSetup();
   BT.begin(9600);
   Serial.begin(9600);
-  myservo.attach(servoMotorPin);
-  myservo.write(nowAngle);
   delay(150); 
 }
 
-void loop() {
-  
+void loop(){
   if (BT.available() > 0) {
-    readByte = BT.read();
-    Serial.println(readByte);
-    if(readByte == mode_motor_stop){
-      montorStop();
-    }else if(readByte == mode_Throw_motor_on || readByte == mode_Throw_motor_off){
-      if(readByte == mode_Throw_motor_on){
-        digitalWrite(throwMotorPin,HIGH);
-        Serial.println("throwOn");
-      }else{
-        digitalWrite(throwMotorPin,LOW);
-        Serial.println("throwOff");
-      }
-    }else if(readByte == mode_Throw_boll_one_time){
-      writeAngle(angleMin);
-      delay(1000);
-      writeAngle(angleMax);
-      delay(1000);
-    }else{
-      readDirection = readByte % 10;
-      readSpeed = (int)(readByte / 10);
-      Serial.print(readByte);
-      Serial.print(" ");
-      Serial.print(readDirection);
-      Serial.print(" ");
-      Serial.println(readSpeed);
-      if(1 <= readDirection <= 9 ){
-        if(1 <= readSpeed <= 5){
-          montorWork(readDirection,readSpeed);
-        }
-      }
-    }
+    byte readByte = BT.read();
+    if(DEBUG)Serial.println(readByte);
+    // 分析藍芽到的接收資訊
+    threadReadMode(readByte);
   }
   
-  if (Serial.available() > 0) {
-    readByte = 0;
-    while(Serial.available() > 0){
-      char nowReadDigital = Serial.read();
-      readByte = readByte*10 + nowReadDigital - '0';
-    }
-    if(readByte >255){
-      readByte = 255;
-    }else if(readByte < 0){
-      readByte = 0;
-    }
-    
-    if(readByte == mode_motor_stop){
+  if (DEBUG && Serial.available() > 0) {
+    // 因Serial讀取為字元讀取，輸入十進位資料需轉換
+    byte readByte = getSerialInt();
+    threadReadMode(readByte);
+  }
+  
+  // 給予投球機器人的狀態感測
+  if((millis() - lastThrowTime) > throwTimeChangeTime){
+    //原為傳送藍芽資料，而不需要此行
+    // 預設感應間隔時間到，關閉觸發投球腳位
+    digitalWrite(throwBollPin,LOW);
+  }
+}
+
+void pinSetup(){
+  pinMode(motor1_1,OUTPUT);
+  pinMode(motor1_2,OUTPUT);
+  pinMode(motor2_1,OUTPUT);
+  pinMode(motor2_2,OUTPUT); 
+  pinMode(throwMotorPin,OUTPUT);
+  pinMode(throwBollPin,OUTPUT);
+  analogWrite(motor1_1,LOW);
+  analogWrite(motor1_2,LOW);
+  analogWrite(motor2_1,LOW);
+  analogWrite(motor2_2,LOW);
+  digitalWrite(throwMotorPin,LOW);
+  digitalWrite(throwBollPin,LOW);
+}
+
+void threadReadMode(byte readByte){
+  if(readByte == mode_motor_stop){
       montorStop();
-    }else if(readByte == mode_Throw_motor_on || readByte == mode_Throw_motor_off){
-      if(readByte == mode_Throw_motor_on){
-        digitalWrite(throwMotorPin,HIGH);
-        Serial.println("throwOn");
-      }else{
-        digitalWrite(throwMotorPin,LOW);
-        Serial.println("throwOff");
-      }
-    }else if(readByte == mode_Throw_boll_one_time){
-      throwBollTime = millis();
+  }else if(readByte == mode_Throw_motor_on || readByte == mode_Throw_motor_off){
+    if(readByte == mode_Throw_motor_on){
+      //原為藍芽傳送資料，後改為單一機器人而做修改
+      digitalWrite(throwMotorPin,HIGH);
+      if(DEBUG)Serial.println("throwOn");
     }else{
-      readDirection = readByte % 10;
-      readSpeed = (int)(readByte / 10);
+      //原為藍芽傳送資料，後改為單一機器人而做修改
+      digitalWrite(throwMotorPin,LOW);
+      if(DEBUG)Serial.println("throwOff");
+    }
+  }else if(readByte == mode_Throw_boll_one_time){
+    //原為藍芽傳送資料，後改為單一機器人而做修改
+    digitalWrite(throwBollPin,HIGH);
+    lastThrowTime = millis();
+  }else{
+    // 十位數 為方向的資訊
+    int readDirection = readByte % 10;
+    // 個位數 為速度大小的資訊
+    int readSpeed = (int)(readByte / 10);
+    if(DEBUG){
       Serial.print(readByte);
       Serial.print(" ");
       Serial.print(readDirection);
       Serial.print(" ");
       Serial.println(readSpeed);
-      if(1 <= readDirection <= 9 ){
-        if(1 <= readSpeed <= 5){
-          montorWork(readDirection,readSpeed);
-        }
+    }
+    // 核對資料標準
+    if(1 <= readDirection <= 9 ){
+      if(1 <= readSpeed <= 5){
+        montorWork(readDirection,readSpeed);
+      }else if(DEBUG){
+        Serial.print("readSpeedEroor:");
+        Serial.println(readSpeed);
       }
+    }else if(DEBUG){
+      Serial.print("readDirectionEroor:");
+      Serial.println(readDirection);
     }
   }
 }
@@ -143,50 +140,31 @@ void montorStop(){
 
 void montorWork(int directionM,int speedM){
   int analogValue [4] ;
-  analogValue[0] = (int)(directionArray[directionM][0] * speedM / 5);
-  analogValue[1] = (int)(directionArray[directionM][1] * speedM / 5);
-  analogValue[2] = (int)(directionArray[directionM][2] * speedM / 5);
-  analogValue[3] = (int)(directionArray[directionM][3] * speedM / 5);
-  Serial.print(analogValue[0]);
-  Serial.print(analogValue[1]);
-  Serial.print(analogValue[2]);
-  Serial.println(analogValue[3]);
-  
+  // 速度調整，將類比輸出直接以五段速作為控制依據
+  for(int i=0;i<4;i++){
+    analogValue[i] = (int)(directionArray[directionM][i] * speedM / 5);
+    if(DEBUG)Serial.print(analogValue[i]);
+  }
   analogWrite(motor1_1,analogValue[0]);
   analogWrite(motor1_2,analogValue[1]); 
   analogWrite(motor2_1,analogValue[2]);
   analogWrite(motor2_2,analogValue[3]); 
 }
 
-void pinSetup(){
-  pinMode(motor1_1,OUTPUT);
-  pinMode(motor1_2,OUTPUT);
-  pinMode(motor2_1,OUTPUT);
-  pinMode(motor2_2,OUTPUT); 
-  pinMode(throwMotorPin,OUTPUT);
-  myservo.attach(servoMotorPin);
-  analogWrite(motor1_1,LOW);
-  analogWrite(motor1_2,LOW);
-  analogWrite(motor2_1,LOW);
-  analogWrite(motor2_2,LOW);
-  digitalWrite(throwMotorPin,LOW);
-}
-
-
-void writeAngle(int readAngle){
-  while(nowAngle != readAngle){
-    if(readAngle > nowAngle){
-      nowAngle += 10;
-      if(nowAngle > readAngle){
-        nowAngle = readAngle;
-      }
-    }else{
-      nowAngle -= 10;
-      if(nowAngle < readAngle){
-        nowAngle = readAngle;
-      }
-    }
-    myservo.write(nowAngle);
-    delay(50);
+int getSerialInt(){
+  char readChr;
+  int readInt = 0;
+  while(Serial.available()){
+    readChr = Serial.read();
+    readInt = readInt*10 + readChr - '0';
+    delay(10);
   }
+  // 資料閥值設定
+  if(readInt >255){
+    readInt = 255;
+  }else if(readInt < 0){
+    readInt = 0;
+  }
+   
+  return readInt;
 }
