@@ -1,8 +1,5 @@
 #include <SoftwareSerial.h>
 #include <Wire.h>
-#include <Servo.h>
-
-Servo myservo; // 建立Servo物件，控制伺服馬達
 SoftwareSerial BT(8,9); //藍芽腳位，TX為PIN8，RX為PIN9
 
 void pinSetup();
@@ -49,6 +46,8 @@ void setup() {
   Serial.begin(9600);
   delay(150); 
 }
+
+
 
 void loop(){
   if (BT.available() > 0) {
